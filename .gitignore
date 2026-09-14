@@ -1,0 +1,19 @@
+# 本地配置（含 PushPlus token）——绝不能提交
+config.local.json
+
+# 本地推送日志
+logs/
+
+# 扫描页渲染图（约 300MB）与中间产物
+book_images/
+verify/
+_render_test/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# 系统
+.DS_Store
+Thumbs.db

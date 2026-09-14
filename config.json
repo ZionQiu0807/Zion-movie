@@ -1,0 +1,8 @@
+{
+  "_note": "本文件不含任何密钥，可安全提交到公开仓库。token 请放 config.local.json（本地）或环境变量 PUSHPLUS_TOKEN（云端）。",
+  "site_url": "https://39795299112b40cf9adf07efaa5d0445.app.workbuddy.host",
+  "start_date": "2026-09-14",
+  "per_day": 5,
+  "channel": "wechat",
+  "topic": null
+}

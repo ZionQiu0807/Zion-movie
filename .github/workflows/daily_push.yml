@@ -1,0 +1,49 @@
+name: 每日名词解释推送
+
+on:
+  schedule:
+    # UTC 04:30 = 北京时间 12:30
+    # 注意：GitHub 的定时任务在高峰期可能延迟几分钟到几十分钟，属正常现象
+    - cron: '30 4 * * *'
+  workflow_dispatch:
+    inputs:
+      date:
+        description: '指定日期（YYYY-MM-DD），留空则用北京时间今天'
+        required: false
+        default: ''
+      dry_run:
+        description: '只预览不发送（填 1 开启）'
+        required: false
+        default: ''
+
+# 避免手动触发与定时任务重叠导致重复推送
+concurrency:
+  group: daily-push
+  cancel-in-progress: false
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: 推送当日五题
+        env:
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          SITE_URL: ${{ vars.SITE_URL }}
+          INPUT_DATE: ${{ github.event.inputs.date }}
+          INPUT_DRYRUN: ${{ github.event.inputs.dry_run }}
+        run: |
+          ARGS=""
+          if [ -n "$INPUT_DATE" ]; then ARGS="$ARGS --date $INPUT_DATE"; fi
+          if [ -n "$INPUT_DRYRUN" ]; then ARGS="$ARGS --dry-run"; fi
+          python push.py $ARGS
+
+      - name: 记录推送结果
+        if: always()
+        run: echo "完成于 $(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')"
