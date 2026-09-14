@@ -11,7 +11,9 @@ GitHub Actions（每天 12:30 北京时间）
                     └── 消息里的链接指向 GitHub Pages 答题页（按日期自动取题）
 ```
 
-## 一次性配置
+## 配置说明（本仓库已完成，重建时参考）
+
+> 以下步骤已由 `scripts/deploy_github.py` 自动完成。手动重建新仓库时按此操作。
 
 ### 1. 仓库设置
 
@@ -88,7 +90,26 @@ python push.py --date 2026-09-15      # 推送指定日期
 
 ## 答题页
 
-- 云端（主）：`https://<用户名>.github.io/<仓库名>/`
+- **云端（主）**：https://zionqiu0807.github.io/Zion-movie/
 - 本地链路（备）：https://39795299112b40cf9adf07efaa5d0445.app.workbuddy.host
 
 页面会根据打开日期自动显示当天 5 题，支持 `?d=YYYY-MM-DD` 查看指定日期。
+
+## 当前部署状态
+
+| 项目 | 值 |
+|---|---|
+| 仓库 | https://github.com/ZionQiu0807/Zion-movie （Public） |
+| Actions | https://github.com/ZionQiu0807/Zion-movie/actions |
+| Pages | `main` 分支 `/docs` 目录 |
+| Secret | `PUSHPLUS_TOKEN`（已加密写入，仓库内不可见） |
+| 定时 | 每天北京时间 12:30（UTC `30 4 * * *`） |
+
+部署脚本：`scripts/deploy_github.py`（幂等，可重复执行）。
+
+**本机定时任务已停用**（保留未删除，作回滚备份）：
+- WorkBuddy automation `dc0c10fe-b291-436f-ad3b-0a0dabf703e3` → PAUSED
+- Windows 计划任务 `BFA_Daily_Mingci_Push` → Disabled
+
+恢复方式：automation 改回 ACTIVE；计划任务用 `Enable-ScheduledTask -TaskName "BFA_Daily_Mingci_Push"`。
+**注意**：三者的触发时间都是 12:30，同时开启会重复推送。
