@@ -55,30 +55,52 @@ def load():
     return cfg, bank
 
 
+def two_pools(bank):
+    """真题池 / 补充池，各自按固定顺序位排列。"""
+    zhenti = sorted([i for i in bank["items"] if i.get("track") == "真题"],
+                    key=lambda x: x.get("zhenti_pos", 10**9))
+    buchong = sorted([i for i in bank["items"] if i.get("track") != "真题"],
+                     key=lambda x: x.get("buchong_pos", 10**9))
+    return zhenti, buchong
+
+
 def pick(bank, day, start_date, per_day):
+    """当天题目：1 道真题 + (per_day-1) 道补充，真题夹在中间。
+
+    两池各自循环，轮长一致（真题 29 / 补充 116÷4=29），一轮之内不重复。
+    """
     d = datetime.date(*map(int, day.split("-")))
     s = datetime.date(*map(int, start_date.split("-")))
     n = (d - s).days
-    items_sorted = sorted(bank["items"], key=lambda x: x.get("seq", 10**9))
-    total = len(items_sorted)
-    start = ((n * per_day) % total + total) % total
-    items = [items_sorted[(start + i) % total] for i in range(per_day)]
-    return items, n + 1, (n * per_day) // total + 1
+    zhenti, buchong = two_pools(bank)
+    per_b = max(per_day - 1, 0)
+
+    items = []
+    if buchong and per_b:
+        bs = ((n * per_b) % len(buchong) + len(buchong)) % len(buchong)
+        items = [buchong[(bs + i) % len(buchong)] for i in range(per_b)]
+    if zhenti:
+        z = zhenti[(n % len(zhenti) + len(zhenti)) % len(zhenti)]
+        items.insert(len(items) // 2, z)
+
+    round_no = n // max(len(zhenti), 1) + 1
+    return items, n + 1, round_no
 
 
 def build_markdown(day, items, url, idx, round_no):
     lines = ["**%s · 专业一名词解释 %d 题**" % (day, len(items)), ""]
     for i, it in enumerate(items, 1):
-        mark = ""
         ys = it.get("years", [])
-        if len(ys) > 1:
-            mark = " ★高频"
-        elif ys:
-            mark = " · 真题 %s" % ys[0]
+        if it.get("track") == "真题":
+            mark = " ★真题%s" % (" " + "/".join(ys) if ys else "")
+        elif it.get("origin") == "真题隐含":
+            mark = " · 真题衍生%s" % ("（%s）" % ys[0] if ys else "")
+        else:
+            mark = " · 教材"
         lines.append("%d. **%s**%s" % (i, it["term"], mark))
     lines += ["",
               "[点这里做题 → 点题目展开答案](%s)" % url, "",
-              "第 %d 期 · 第 %d 轮 · 答不出的当天背熟" % (idx, round_no)]
+              "第 %d 期 · 第 %d 轮 · 每期 1 道真题 + 4 道补充 · 答不出的当天背熟" % (idx, round_no)]
     return "\n".join(lines)
 
 

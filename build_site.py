@@ -78,20 +78,26 @@ function shift(s,n){var d=parse(s);d.setDate(d.getDate()+n);return iso(d)}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 function itemsFor(day){
   var n = Math.round((parse(day)-parse(START))/86400000);
-  TOTAL = BANK.length;
-  var start = ((n*PER) % TOTAL + TOTAL) % TOTAL;
-  var out=[];
-  for(var i=0;i<PER;i++){out.push(BANK[(start+i)%TOTAL])}
-  return {items:out, round: Math.floor((n*PER)/TOTAL)+1, idx:n+1};
+  var nz=ZQ.length, nb=BC.length, perB=PER-1;
+  var z=ZQ[((n%nz)+nz)%nz];
+  var bs=((n*perB)%nb+nb)%nb;
+  var out=[], bi=0, mid=Math.floor(perB/2);
+  for(var i=0;i<perB;i++){
+    if(i===mid){out.push(z)}
+    out.push(BC[(bs+bi)%nb]); bi++;
+  }
+  if(mid>=perB){out.push(z)}
+  return {items:out, round: Math.floor(n/nz)+1, idx:n+1};
 }
 function render(day){
   var r = itemsFor(day), h='';
   document.getElementById('h1').textContent = day + ' · 专业一名词解释 ' + PER + ' 题';
-  document.getElementById('sub').textContent = '北京电影学院 艺术基础理论 · 第 ' + r.idx + ' 期（第 ' + r.round + ' 轮 · 题库共 ' + BANK.length + ' 条）';
+  document.getElementById('sub').textContent = '北京电影学院 艺术基础理论 · 第 ' + r.idx + ' 期（第 ' + r.round + ' 轮 · 真题 ' + ZQ.length + ' + 补充 ' + BC.length + '）';
   r.items.forEach(function(it,i){
     var tags='';
-    (it.years||[]).forEach(function(y){tags+='<span class="tag hot">真题 '+esc(y)+'</span>'});
-    if((it.years||[]).length>1){tags+='<span class="tag hot">高频</span>'}
+    if(it.track==='真题'){tags+='<span class="tag hot">真题</span>'}
+    (it.years||[]).forEach(function(y){tags+='<span class="tag hot">'+esc(y)+'</span>'});
+    if(it.origin==='真题隐含'){tags+='<span class="tag hot">真题衍生</span>'}
     (it.tags||[]).forEach(function(t){tags+='<span class="tag">'+esc(t)+'</span>'});
     var pts='';(it.points||[]).forEach(function(p){pts+='<li>'+esc(p)+'</li>'});
     h+='<details class="card" data-i="'+i+'"><summary class="q"><span class="no">'+(i+1)+
@@ -105,7 +111,7 @@ function render(day){
   document.getElementById('list').innerHTML=h;
   document.getElementById('prev').href='?d='+shift(day,-1);
   document.getElementById('next').href='?d='+shift(day,1);
-  document.getElementById('foot').innerHTML='真题来自 zhenti.md 可溯源真题库；教材范围内的条目标注了章节来源；超出彭吉象教材范围的条目已标注依据，存疑处请回教材核实';
+  document.getElementById('foot').innerHTML='每期 1 道真题 + 4 道补充，真题 29 条与补充 116 条同为 29 天一轮，一轮内不重复。条目标注的页码为彭吉象《艺术学概论》第6版／钟大丰舒晓鸣《中国电影史》／郑亚玲胡滨《外国电影史》的核对出处。';
 }
 function allOpen(v){document.querySelectorAll('details').forEach(function(d){d.open=v})}
 var q=new URLSearchParams(location.search).get('d');
@@ -116,20 +122,34 @@ render(day);
 </html>"""
 
 
+def slim_one(it):
+    return {
+        "term": it["term"],
+        "definition": it["definition"],
+        "points": it["points"],
+        "mnemonic": it["mnemonic"],
+        "source_note": it["source_note"],
+        "years": it.get("years", []),
+        "tags": it.get("tags", []),
+        "track": it.get("track", "补充"),
+        "origin": it.get("origin", ""),
+    }
+
+
 def main():
     bank = json.load(open(BANK, encoding="utf-8"))
-    slim = []
-    for it in sorted(bank["items"], key=lambda x: x.get("seq", 10**9)):
-        slim.append({
-            "term": it["term"],
-            "definition": it["definition"],
-            "points": it["points"],
-            "mnemonic": it["mnemonic"],
-            "source_note": it["source_note"],
-            "years": it.get("years", []),
-            "tags": it.get("tags", []),
-        })
-    data = "var BANK=" + json.dumps(slim, ensure_ascii=False) + ";"
+    zhenti = sorted([i for i in bank["items"] if i.get("track") == "真题"],
+                    key=lambda x: x.get("zhenti_pos", 10**9))
+    buchong = sorted([i for i in bank["items"] if i.get("track") != "真题"],
+                     key=lambda x: x.get("buchong_pos", 10**9))
+    if not zhenti:
+        # 兼容未打轨道的旧题库
+        buchong = sorted(bank["items"], key=lambda x: x.get("seq", 10**9))
+    zq = [slim_one(i) for i in zhenti]
+    bc = [slim_one(i) for i in buchong]
+
+    data = ("var ZQ=" + json.dumps(zq, ensure_ascii=False) + ";\n"
+            "var BC=" + json.dumps(bc, ensure_ascii=False) + ";")
     page = HTML.replace("__START__", START_DATE).replace("__PER__", str(PER_DAY))
     for out_dir in (SITE, DOCS):
         os.makedirs(out_dir, exist_ok=True)
@@ -137,7 +157,7 @@ def main():
             f.write(data)
         with open(os.path.join(out_dir, "index.html"), "w", encoding="utf-8") as f:
             f.write(page)
-    print("已生成 site/ 与 docs/：index.html + data.js（%d 条词条）" % len(slim))
+    print("已生成 site/ 与 docs/：index.html + data.js（真题 %d 条 / 补充 %d 条）" % (len(zq), len(bc)))
 
 
 if __name__ == "__main__":
