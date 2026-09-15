@@ -3,7 +3,8 @@ name: 每日名词解释推送
 on:
   schedule:
     # UTC 04:30 = 北京时间 12:30
-    # 注意：GitHub 的定时任务在高峰期可能延迟几分钟到几十分钟，属正常现象
+    # 注意：GitHub 的定时任务在高峰期可能延迟几分钟到几十分钟，属正常现象。
+    # 延迟补跑不会造成重复推送——push.py 会读 logs/推送记录.jsonl 去重。
     - cron: '30 4 * * *'
   workflow_dispatch:
     inputs:
@@ -15,6 +16,14 @@ on:
         description: '只预览不发送（填 1 开启）'
         required: false
         default: ''
+      force:
+        description: '该日期已推送过也强制重发（填 1 开启）'
+        required: false
+        default: ''
+
+# 权限：需要写权限把推送记录回写到仓库（去重状态）
+permissions:
+  contents: write
 
 # 避免手动触发与定时任务重叠导致重复推送
 concurrency:
@@ -38,12 +47,31 @@ jobs:
           SITE_URL: ${{ vars.SITE_URL }}
           INPUT_DATE: ${{ github.event.inputs.date }}
           INPUT_DRYRUN: ${{ github.event.inputs.dry_run }}
+          INPUT_FORCE: ${{ github.event.inputs.force }}
         run: |
           ARGS=""
           if [ -n "$INPUT_DATE" ]; then ARGS="$ARGS --date $INPUT_DATE"; fi
           if [ -n "$INPUT_DRYRUN" ]; then ARGS="$ARGS --dry-run"; fi
+          if [ -n "$INPUT_FORCE" ]; then ARGS="$ARGS --force"; fi
           python push.py $ARGS
 
-      - name: 记录推送结果
+      - name: 回写推送记录（用于去重）
+        if: always()
+        run: |
+          if [ ! -f logs/推送记录.jsonl ]; then
+            echo "无推送记录可回写（只预览或未发送）"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f logs/推送记录.jsonl
+          if git diff --cached --quiet; then
+            echo "推送记录无变化，跳过提交"
+          else
+            git commit -m "chore: 更新推送记录 $(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M')"
+            git push
+          fi
+
+      - name: 记录完成时间
         if: always()
         run: echo "完成于 $(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')"

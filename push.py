@@ -9,6 +9,7 @@ GitHub Actions：设置 Secrets PUSHPLUS_TOKEN，脚本会自动用环境变量�
   python push.py                 # 推送今天的
   python push.py --date 2026-09-15
   python push.py --dry-run       # 只打印内容不发送
+  python push.py --force         # 当天已推送过也强制重发
 """
 import argparse
 import datetime
@@ -104,6 +105,32 @@ def build_markdown(day, items, url, idx, round_no):
     return "\n".join(lines)
 
 
+def log_path():
+    return os.path.join(LOGDIR, "推送记录.jsonl")
+
+
+def already_pushed(day):
+    """推送记录里是否已有该日期且成功的记录（用于定时任务延迟补跑去重）。"""
+    p = log_path()
+    if not os.path.exists(p):
+        return False
+    try:
+        with open(p, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                if rec.get("date") == day and rec.get("code") == 200:
+                    return True
+    except Exception:
+        return False
+    return False
+
+
 def send(token, title, content, channel, topic):
     payload = {"token": token, "title": title, "content": content,
                "template": "markdown", "channel": channel}
@@ -120,10 +147,19 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--date", default=None)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--force", action="store_true",
+                    help="忽略当天已推送记录，强制再发一次")
     args = ap.parse_args()
 
     cfg, bank = load()
     day = args.date or datetime.datetime.now(TZ_BJ).date().isoformat()
+
+    if not args.dry_run and not args.force and already_pushed(day):
+        print(json.dumps({"date": day, "skipped": True,
+                          "reason": "当天已成功推送过，跳过（如确需重发请加 --force）"},
+                         ensure_ascii=False))
+        return 0
+
     items, idx, round_no = pick(bank, day, cfg["start_date"], cfg["per_day"])
     md = build_markdown(day, items, cfg["site_url"], idx, round_no)
     title = "%s 专业一名词解释 %d 题" % (day, len(items))
@@ -141,7 +177,7 @@ def main():
     res = send(token, title, md, cfg.get("channel", "wechat"),
                cfg.get("topic"))
     os.makedirs(LOGDIR, exist_ok=True)
-    log = os.path.join(LOGDIR, "推送记录.jsonl")
+    log = log_path()
     with open(log, "a", encoding="utf-8") as f:
         f.write(json.dumps({"date": day, "at": datetime.datetime.now(TZ_BJ).isoformat(timespec="seconds"),
                             "terms": [it["term"] for it in items],

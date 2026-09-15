@@ -1,8 +1,9 @@
 # 本地配置（含 PushPlus token）——绝不能提交
 config.local.json
 
-# 本地推送日志
-logs/
+# 本地推送日志（只把推送记录入库，用于云端去重，防止定时任务补跑重复推送）
+logs/*
+!logs/推送记录.jsonl
 
 # 扫描页渲染图（约 300MB）与核对中间产物
 book_images/
